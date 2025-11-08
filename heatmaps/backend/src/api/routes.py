@@ -5,6 +5,7 @@ import os
 import shutil
 from datetime import datetime
 from bson import ObjectId
+from starlette.datastructures import UploadFile as StarletteUploadFile
 import json
 
 from ..database.connection import (
@@ -18,6 +19,19 @@ from ..config.settings import settings
 
 app = FastAPI(title="Retail Heatmap API")
 
+
+# Add this:
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Add file size limit configuration
+
+StarletteUploadFile.spool_max_size = 1024 * 1024 * 500 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
@@ -305,7 +319,7 @@ async def get_daily_heatmaps(store_id: str):
 
 @app.get("/api/stores/{store_id}/insights")
 async def get_daily_insights(store_id: str):
-insights = []
+    insights = []
     async for insight in daily_insights_collection.find({"store_id": store_id}):
         insight['_id'] = str(insight['_id'])
         insights.append(insight)

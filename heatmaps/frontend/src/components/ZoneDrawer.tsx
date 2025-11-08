@@ -17,7 +17,10 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
   const [drawing, setDrawing] = useState(false);
   const [error, setError] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [videoSnapshot, setVideoSnapshot] = useState<string>('');
+  
+  // Canvas dimensions
+  const CANVAS_WIDTH = 640;
+  const CANVAS_HEIGHT = 480;
 
   useEffect(() => {
     loadCameras();
@@ -68,12 +71,39 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
     }
 
     try {
+      // Get the selected camera's video resolution
+      const selectedCam = cameras.find(cam => cam._id === selectedCamera);
+      
+      if (!selectedCam) {
+        setError('Selected camera not found');
+        return;
+      }
+
+      // Get actual video dimensions (use resolution from camera metadata)
+      const videoWidth = selectedCam.resolution_width || CANVAS_WIDTH;
+      const videoHeight = selectedCam.resolution_height || CANVAS_HEIGHT;
+
+      // Calculate scaling factors
+      const scaleX = videoWidth / CANVAS_WIDTH;
+      const scaleY = videoHeight / CANVAS_HEIGHT;
+
+      // Scale polygon coordinates to match actual video resolution
+      const scaledPolygon = polygon.map(([x, y]) => [
+        Math.round(x * scaleX),
+        Math.round(y * scaleY)
+      ]);
+
+      console.log('Original polygon:', polygon);
+      console.log('Scaled polygon:', scaledPolygon);
+      console.log(`Scaling: Canvas(${CANVAS_WIDTH}x${CANVAS_HEIGHT}) -> Video(${videoWidth}x${videoHeight})`);
+
       const zoneIdentifier = zoneName.toLowerCase().replace(/\s+/g, '_');
+      
       await createZone(
         selectedCamera,
         zoneIdentifier,
         zoneName,
-        polygon,
+        scaledPolygon,  // Use scaled polygon instead of original
         zoneType,
         '#FF5733',
         threshold
@@ -83,7 +113,7 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
       setPolygon([]);
       setError('');
       onZoneCreated();
-      alert('Zone created successfully!');
+      alert('Zone created successfully! Coordinates have been scaled to match video resolution.');
     } catch (err) {
       setError('Failed to create zone');
       console.error(err);
@@ -125,6 +155,20 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
     }
   }, [polygon, drawing]);
 
+  // Get selected camera resolution info
+  const getSelectedCameraInfo = () => {
+    const selectedCam = cameras.find(cam => cam._id === selectedCamera);
+    if (!selectedCam) return null;
+    
+    return {
+      width: selectedCam.resolution_width || CANVAS_WIDTH,
+      height: selectedCam.resolution_height || CANVAS_HEIGHT,
+      fps: selectedCam.fps || 'Unknown'
+    };
+  };
+
+  const cameraInfo = getSelectedCameraInfo();
+
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '20px auto' }}>
       <h3>Define Zones</h3>
@@ -135,7 +179,11 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
         </label>
         <select
           value={selectedCamera}
-          onChange={(e) => setSelectedCamera(e.target.value)}
+          onChange={(e) => {
+            setSelectedCamera(e.target.value);
+            setPolygon([]); // Clear polygon when changing camera
+            setDrawing(false);
+          }}
           style={{ width: '100%', padding: '8px', fontSize: '14px' }}
         >
           {cameras.map((cam) => (
@@ -144,6 +192,26 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
             </option>
           ))}
         </select>
+        
+        {/* Display camera resolution info */}
+        {cameraInfo && (
+          <div style={{ 
+            marginTop: '5px', 
+            padding: '8px', 
+            backgroundColor: '#e3f2fd', 
+            borderRadius: '4px',
+            fontSize: '12px'
+          }}>
+            <strong>Camera Info:</strong> Resolution: {cameraInfo.width}x{cameraInfo.height}, 
+            FPS: {cameraInfo.fps}
+            {(cameraInfo.width !== CANVAS_WIDTH || cameraInfo.height !== CANVAS_HEIGHT) && (
+              <div style={{ color: '#1976d2', marginTop: '4px' }}>
+                ⚠️ Coordinates will be automatically scaled from canvas ({CANVAS_WIDTH}x{CANVAS_HEIGHT}) 
+                to video resolution ({cameraInfo.width}x{cameraInfo.height})
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: '15px' }}>
@@ -191,15 +259,19 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
       <div style={{ marginBottom: '15px' }}>
         <canvas
           ref={canvasRef}
-          width={640}
-          height={480}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
           onClick={handleCanvasClick}
           style={{
             border: '2px solid #ddd',
             cursor: drawing ? 'crosshair' : 'default',
             backgroundColor: '#f5f5f5',
+            display: 'block',
           }}
         />
+        <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+          Drawing canvas: {CANVAS_WIDTH}x{CANVAS_HEIGHT} pixels
+        </div>
       </div>
 
       <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
@@ -264,7 +336,7 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
             cursor: 'pointer',
           }}
         >
-          Save Zone
+          Save Zone ({polygon.length} points)
         </button>
       )}
 
@@ -276,9 +348,10 @@ const ZoneDrawer: React.FC<ZoneDrawerProps> = ({ storeId, onZoneCreated }) => {
         <p><strong>Instructions:</strong></p>
         <ul>
           <li>Click "Start Drawing Zone" to begin</li>
-          <li>Click on the canvas to add points</li>
-          <li>Create at least 3 points to form a zone</li>
+          <li>Click on the canvas to add points (minimum 3 points)</li>
+          <li>Points will form a polygon zone</li>
           <li>Click "Finish Drawing" when done</li>
+          <li>Coordinates will be automatically scaled to match video resolution</li>
           <li>Click "Save Zone" to save</li>
         </ul>
       </div>

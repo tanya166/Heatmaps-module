@@ -122,7 +122,7 @@ class DailyHeatmap(BaseModel):
         populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
-
+s
 class DailyInsights(BaseModel):
     """End-of-day insights summary"""
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getProcessingStatus, startProcessing } from '../services/api';
 import { ProcessingStatus as Status } from '../types';
 
@@ -11,25 +11,7 @@ const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ storeId, onProcessi
   const [status, setStatus] = useState<Status | null>(null);
   const [polling, setPolling] = useState(false);
 
-  useEffect(() => {
-    checkStatus();
-  }, [storeId]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (polling) {
-      interval = setInterval(() => {
-        checkStatus();
-      }, 2000); // Poll every 2 seconds
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [polling]);
-
-  const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
     try {
       const currentStatus = await getProcessingStatus(storeId);
       setStatus(currentStatus);
@@ -45,7 +27,21 @@ const ProcessingStatus: React.FC<ProcessingStatusProps> = ({ storeId, onProcessi
     } catch (err) {
       console.error('Failed to get processing status', err);
     }
-  };
+  }, [storeId, onProcessingComplete]);
+
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  useEffect(() => {
+    if (!polling) return;
+
+    const interval = setInterval(() => {
+      checkStatus();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [polling, checkStatus]);
 
   const handleStartProcessing = async () => {
     try {

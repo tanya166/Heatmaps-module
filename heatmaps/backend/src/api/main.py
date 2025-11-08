@@ -6,7 +6,7 @@ load_dotenv()
 
 if __name__ == "__main__":
     uvicorn.run(
-        "src.api.routes:app",
+        "routes:app",
         host="0.0.0.0",
         port=settings.port,
         reload=True
